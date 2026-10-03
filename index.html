@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Group rotation</title>
+<meta name="description" content="Rotating small groups until everyone has been in a group with everyone else.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231A2140'/%3E%3Ccircle cx='10' cy='20' r='4.5' fill='%234FB4F5'/%3E%3Ccircle cx='22' cy='20' r='4.5' fill='%23D684EA'/%3E%3Ccircle cx='16' cy='10.5' r='4.5' fill='%23FF9A45'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#F3F5FA" id="themeColor">
+<script>
+/* Apply a saved light/dark choice before the page paints, so there's no flash. */
+try { var saved = localStorage.getItem("group-rotation:theme"); if (saved === "light" || saved === "dark") document.documentElement.setAttribute("data-theme", saved); } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ------------------------------------------------------------------
+   Tokens. Everything visual is driven from here, so a re-skin is a
+   matter of editing this block. Group colours cycle g1..g5.
+   ------------------------------------------------------------------ */
+:root {
+  --paper: #F3F5FA;
+  --surface: #FFFFFF;
+  --ink: #1A2140;
+  --muted: #586080;
+  --line: #D7DCEA;
+  --action: #2B45C9;
+  --action-ink: #FFFFFF;
+  /* Group colours: blue, orchid and orange are spread far apart on the
+     colour wheel so they can't be mistaken for each other, and they avoid
+     green, yellow and red, which belong to the "Who's met who" heat map
+     (the --met tokens below). Each group has a band colour, a card fill
+     and a darker shade for its label. */
+  --g1: #1E9BE8;  --g1-wash: #D9EEFC;  --g1-ink: #0F5F96;
+  --g2: #B950D2;  --g2-wash: #F3E1F8;  --g2-ink: #7D2A93;
+  --g3: #F07F1F;  --g3-wash: #FDE8D4;  --g3-ink: #9C4A05;
+  --g4: #64708A;  --g4-wash: #DEE3EC;  --g4-ink: #3F4A63;
+  --g5: #4353C9;  --g5-wash: #DFE2F8;  --g5-ink: #2B3794;
+  --met: #12897B;
+  --met1: #CDE9E5;
+  --met2: #F7DC9A;
+  --met3: #F3ABBF;
+  /* One plain sans for everything. Headings differ only by size and
+     weight. If the web font can't load, the device's own sans is used. */
+  --display: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+/* Dark colours. Used when the device is in dark mode (unless the toggle
+   chose light), or when the toggle chose dark. The two blocks must match. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #10142A;
+    --surface: #191F3D;
+    --ink: #ECEFFA;
+    --muted: #A3ABCB;
+    --line: #2E3660;
+    --action: #8FA2FF;
+    --action-ink: #0E1330;
+    /* Fills are deliberately lighter and more saturated than the navy
+       page so each card stands off the background. */
+    --g1: #4FB4F5;  --g1-wash: #17486F;  --g1-ink: #9AD6FF;
+    --g2: #D684EA;  --g2-wash: #552B6B;  --g2-ink: #EDB5FA;
+    --g3: #FF9A45;  --g3-wash: #653A10;  --g3-ink: #FFC48F;
+    --g4: #A9B4CC;  --g4-wash: #3A4360;  --g4-ink: #D3DAEA;
+    --g5: #8E9BE8;  --g5-wash: #2A3478;  --g5-ink: #C3CBFA;
+    --met: #3CC0AF;
+    --met1: #1F4A45;
+    --met2: #6A5210;
+    --met3: #7A2942;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #10142A;
+  --surface: #191F3D;
+  --ink: #ECEFFA;
+  --muted: #A3ABCB;
+  --line: #2E3660;
+  --action: #8FA2FF;
+  --action-ink: #0E1330;
+  /* Fills are deliberately lighter and more saturated than the navy
+     page so each card stands off the background. */
+  --g1: #4FB4F5;  --g1-wash: #17486F;  --g1-ink: #9AD6FF;
+  --g2: #D684EA;  --g2-wash: #552B6B;  --g2-ink: #EDB5FA;
+  --g3: #FF9A45;  --g3-wash: #653A10;  --g3-ink: #FFC48F;
+  --g4: #A9B4CC;  --g4-wash: #3A4360;  --g4-ink: #D3DAEA;
+  --g5: #8E9BE8;  --g5-wash: #2A3478;  --g5-ink: #C3CBFA;
+  --met: #3CC0AF;
+  --met1: #1F4A45;
+  --met2: #6A5210;
+  --met3: #7A2942;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 1rem/1.5 var(--body);
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+}
+.wrap { max-width: 46rem; margin: 0 auto; padding: 1rem 1rem 7rem; }
+h1, h2, h3, p { margin: 0; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* ---------- top bar ---------- */
+.top { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
+.top h1 { font: 700 1.0625rem/1.2 var(--display); letter-spacing: -0.015em; white-space: nowrap; }
+.save-state { font-size: 0.8125rem; color: var(--muted); white-space: nowrap; }
+.top-actions { display: flex; gap: 0.5rem; flex: none; }
+
+/* ---------- buttons ---------- */
+.btn { border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 0.625rem 1.125rem; font-weight: 600; cursor: pointer; min-height: 2.75rem; }
+.btn:hover { border-color: var(--ink); }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn[disabled]:hover { border-color: var(--line); }
+.btn-primary { background: var(--action); border-color: var(--action); color: var(--action-ink); padding: 0.75rem 1.5rem; font-size: 1.0625rem; }
+.btn-primary:hover { border-color: var(--action); filter: brightness(1.08); }
+.btn-small { min-height: 2.25rem; padding: 0.3125rem 0.875rem; font-size: 0.875rem; }
+.btn-icon { width: 2.25rem; padding: 0; display: inline-grid; place-items: center; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.625rem; align-items: center; }
+
+/* ---------- how it works ---------- */
+.help { background: var(--surface); border: 1.5px solid var(--line); border-radius: 1rem; padding: 1.125rem 1.25rem 1.25rem; margin-top: 1rem; }
+.help h2 { font: 700 1.125rem/1.2 var(--display); letter-spacing: -0.015em; }
+.help ol { margin: 0.75rem 0 0; padding: 0; list-style: none; counter-reset: step; }
+.help li { counter-increment: step; display: grid; grid-template-columns: 1.75rem 1fr; gap: 0.75rem; padding: 0.375rem 0; }
+.help li::before { content: counter(step); width: 1.75rem; height: 1.75rem; border-radius: 50%; background: var(--ink); color: var(--paper); font: 600 0.875rem/1.75rem var(--display); text-align: center; }
+.help .reassure { color: var(--muted); margin-top: 0.75rem; }
+.help .actions { margin-top: 0.875rem; }
+
+/* ---------- tabs ---------- */
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.25rem; margin-top: 1rem; padding: 0.25rem; background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; }
+.tab { border: 0; background: transparent; border-radius: 999px; padding: 0.5rem 0.25rem; min-height: 2.5rem; font-weight: 600; font-size: 0.875rem; white-space: nowrap; cursor: pointer; color: var(--muted); }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+.panel { padding-top: 1.75rem; }
+.panel > h2:not(.now-title), .block > h2 { font: 700 1.3125rem/1.25 var(--display); letter-spacing: -0.02em; }
+.lede { color: var(--muted); margin-top: 0.25rem; max-width: 36rem; }
+.block { margin-top: 2.5rem; }
+
+/* ---------- this round ---------- */
+.now-title { font: 800 clamp(2.75rem, 12vw, 4rem)/1 var(--display); letter-spacing: -0.04em; }
+.now-sub { color: var(--muted); margin-top: 0.625rem; max-width: 36rem; }
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; margin: 1.25rem 0 0; padding: 0; list-style: none; }
+.group { background: var(--wash); border-left: 0.5rem solid var(--tone); border-radius: 0.25rem 1rem 1rem 0.25rem; padding: 0.875rem 1rem 1rem; }
+.group h3 { font: 700 0.875rem/1.2 var(--body); color: var(--label); }
+.group ul { list-style: none; margin: 0.375rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 0.875rem; }
+.group li { font: 600 clamp(1.3125rem, 5.4vw, 1.5rem)/1.3 var(--display); letter-spacing: -0.02em; }
+.tone-1 { --tone: var(--g1); --wash: var(--g1-wash); --label: var(--g1-ink); }
+.tone-2 { --tone: var(--g2); --wash: var(--g2-wash); --label: var(--g2-ink); }
+.tone-3 { --tone: var(--g3); --wash: var(--g3-wash); --label: var(--g3-ink); }
+.tone-4 { --tone: var(--g4); --wash: var(--g4-wash); --label: var(--g4-ink); }
+.tone-5 { --tone: var(--g5); --wash: var(--g5-wash); --label: var(--g5-ink); }
+@media (prefers-reduced-motion: no-preference) {
+  .groups.fresh .group { animation: deal 380ms cubic-bezier(.2,.8,.2,1) both; }
+  .groups.fresh .group:nth-child(2) { animation-delay: 70ms; }
+  .groups.fresh .group:nth-child(3) { animation-delay: 140ms; }
+  .groups.fresh .group:nth-child(n+4) { animation-delay: 210ms; }
+  @keyframes deal { from { opacity: 0; transform: translateY(0.75rem) rotate(-0.6deg); } }
+}
+.round-actions { margin-top: 1.25rem; }
+.done-hint { color: var(--muted); margin-top: 0.625rem; max-width: 36rem; }
+.note { color: var(--muted); margin-top: 0.5rem; }
+.note:empty { display: none; }
+.copy-box { width: 100%; margin-top: 0.5rem; min-height: 7rem; border: 1.5px solid var(--line); border-radius: 0.75rem; background: var(--surface); padding: 0.75rem; }
+
+/* fold-outs on the round screen */
+.fold { border: 1.5px solid var(--line); border-radius: 1rem; background: var(--surface); margin-top: 0.75rem; }
+.fold:first-of-type { margin-top: 1.75rem; }
+.fold > summary { cursor: pointer; font-weight: 600; padding: 0.875rem 1.125rem; border-radius: 1rem; }
+.fold > summary span { font-weight: 400; color: var(--muted); }
+.fold-body { padding: 0 1.125rem 1.125rem; }
+.fold-body > p { color: var(--muted); max-width: 34rem; }
+.fold-body .actions { margin-top: 0.875rem; }
+.fold-body .rows li:last-child { border-bottom: 0; padding-bottom: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0 0; padding: 0; list-style: none; }
+.chip { border: 1.5px solid var(--line); background: var(--paper); border-radius: 999px; padding: 0.4375rem 0.9375rem; min-height: 2.5rem; font-weight: 600; cursor: pointer; }
+.chip:hover { border-color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); text-decoration: line-through; }
+.chip[aria-pressed="true"]::after { content: " out"; display: inline-block; text-decoration: none; margin-left: 0.375rem; font-weight: 400; }
+
+/* ---------- round lists (later rounds + past rounds) ---------- */
+.rounds { list-style: none; margin: 1rem 0 0; padding: 0; border-top: 1.5px solid var(--line); }
+.rounds > li { display: grid; grid-template-columns: 6.25rem 1fr; gap: 0.25rem 1rem; padding: 0.875rem 0; border-bottom: 1.5px solid var(--line); }
+.fold .rounds > li:last-child { border-bottom: 0; padding-bottom: 0; }
+.round-name { font: 700 1rem/1.5 var(--display); letter-spacing: -0.01em; }
+.round-tag { display: block; font: 500 0.8125rem/1.3 var(--body); color: var(--muted); }
+.round-groups { list-style: none; margin: 0; padding: 0; }
+.round-groups li { display: flex; gap: 0.625rem; align-items: baseline; padding: 0.0625rem 0; }
+.round-groups li::before { content: ""; flex: none; width: 0.625rem; height: 0.625rem; border-radius: 50%; background: var(--tone); }
+.round-extra { grid-column: 2; margin-top: 0.5rem; }
+
+/* ---------- progress ---------- */
+.progress { margin-top: 1rem; background: var(--surface); border: 1.5px solid var(--line); border-radius: 1rem; padding: 1rem 1.125rem 1.125rem; }
+.progress-line { font-weight: 600; }
+.progress-line strong { font: 800 1.5rem/1 var(--display); letter-spacing: -0.03em; }
+.bar { height: 0.75rem; background: var(--line); border-radius: 999px; margin-top: 0.75rem; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--met); border-radius: 999px; transition: width 400ms ease; }
+.forecast { margin-top: 0.75rem; color: var(--muted); }
+.unmet { list-style: none; margin: 1rem 0 0; padding: 0; }
+.unmet li { display: grid; grid-template-columns: 6.25rem 1fr; gap: 0 1rem; padding: 0.375rem 0; }
+.unmet b { font-weight: 600; }
+.unmet .done { color: var(--muted); }
+.matrix-scroll { overflow-x: auto; margin-top: 1rem; padding-bottom: 0.25rem; }
+table.matrix { border-collapse: separate; border-spacing: 3px; }
+.matrix th { font-weight: 500; font-size: 0.8125rem; white-space: nowrap; }
+.matrix thead th { vertical-align: bottom; padding-bottom: 0.25rem; }
+.matrix thead th span { writing-mode: vertical-rl; transform: rotate(180deg); }
+.matrix tbody th { text-align: right; padding-right: 0.5rem; position: sticky; left: 0; background: var(--paper); }
+.matrix td { width: 1.75rem; height: 1.75rem; min-width: 1.75rem; text-align: center; font-size: 0.8125rem; font-weight: 600; border-radius: 0.375rem; }
+.matrix td.m0 { box-shadow: inset 0 0 0 1.5px var(--line); color: var(--muted); font-weight: 400; }
+.matrix td.m1 { background: var(--met1); }
+.matrix td.m2 { background: var(--met2); }
+.matrix td.m3 { background: var(--met3); }
+.matrix td.self { box-shadow: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.375rem 1.125rem; list-style: none; padding: 0; margin: 0.75rem 0 0; font-size: 0.875rem; color: var(--muted); }
+.legend li { display: flex; align-items: center; gap: 0.4375rem; }
+.legend i { width: 1rem; height: 1rem; border-radius: 0.25rem; }
+.legend .m0 { box-shadow: inset 0 0 0 1.5px var(--line); }
+.legend .m1 { background: var(--met1); } .legend .m2 { background: var(--met2); } .legend .m3 { background: var(--met3); }
+
+/* ---------- manage ---------- */
+.rows { list-style: none; margin: 1rem 0 0; padding: 0; border-top: 1.5px solid var(--line); }
+.rows li { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1.5px solid var(--line); }
+.rows .who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rows .who b { font-weight: 600; display: block; }
+.rows .who small { color: var(--muted); font-size: 0.875rem; }
+.add { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+.add input { flex: 1; min-width: 10rem; border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 0.625rem 1rem; min-height: 2.75rem; }
+.block .actions { margin-top: 0.875rem; }
+.empty { color: var(--muted); margin-top: 0.75rem; }
+
+/* ---------- link banner + toast ---------- */
+.banner { background: var(--surface); border: 1.5px solid var(--action); border-radius: 1rem; padding: 1rem 1.125rem; margin-top: 1rem; }
+.banner .actions { margin-top: 0.75rem; }
+.toast { position: fixed; left: 1rem; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); max-width: 30rem; margin: 0 auto; z-index: 10;
+  display: flex; align-items: center; gap: 0.75rem; background: var(--ink); color: var(--paper); border-radius: 1rem; padding: 0.75rem 0.75rem 0.75rem 1.125rem; box-shadow: 0 0.5rem 1.5rem rgba(10, 16, 48, 0.28); }
+.toast p { flex: 1; }
+.toast .btn { background: transparent; border-color: var(--paper); color: var(--paper); min-height: 2.5rem; padding: 0.375rem 1rem; }
+
+@media (max-width: 26rem) {
+  /* Shrink the grid so eleven people fit a phone without sideways scrolling. */
+  table.matrix { border-spacing: 2px; }
+  .matrix td { width: 1.5rem; height: 1.5rem; min-width: 1.5rem; font-size: 0.75rem; }
+  .matrix th { font-size: 0.75rem; }
+  .matrix tbody th { padding-right: 0.25rem; }
+  .rounds > li, .unmet li { grid-template-columns: 1fr; }
+  .round-tag { display: inline; margin-left: 0.5rem; }
+  .round-extra { grid-column: 1; }
+  .tab { font-size: 0.8125rem; }
+  .round-actions .btn-primary { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Group rotation</h1>
+      <p class="save-state" id="saveState"></p>
+    </div>
+    <div class="top-actions">
+      <button class="btn btn-small" id="undoBtn" type="button" disabled>Undo</button>
+      <button class="btn btn-small" id="helpBtn" type="button" aria-expanded="true" aria-controls="help">Help</button>
+      <button class="btn btn-small btn-icon" id="themeBtn" type="button" aria-label="Switch to dark mode">
+        <svg id="iconMoon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+        <svg id="iconSun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="banner" id="linkBanner" hidden>
+    <p id="linkBannerText"></p>
+    <div class="actions">
+      <button class="btn btn-primary" id="linkLoad" type="button">Load these rounds</button>
+      <button class="btn" id="linkIgnore" type="button">Keep what's on this device</button>
+    </div>
+  </div>
+
+  <section class="help" id="help" aria-labelledby="helpTitle">
+    <h2 id="helpTitle">How it works</h2>
+    <ol>
+      <li><span><b>Use the groups shown below</b> at your next get-together.</span></li>
+      <li><span><b>Someone can't make it?</b> Open that box under the groups and tap their name. The groups re-deal without them, for that round only.</span></li>
+      <li><span><b>Afterwards, tap the blue "Round is done" button.</b> The next round appears.</span></li>
+    </ol>
+    <p class="reassure">Repeat until everyone has been in a group with everyone else. Everything saves by itself, and Undo at the top takes back your last change. The moon or sun button switches between dark and light.</p>
+    <div class="actions"><button class="btn btn-small" id="helpClose" type="button">Got it, hide this</button></div>
+  </section>
+
+  <div class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" type="button" id="tab-round" aria-controls="panel-round">This round</button>
+    <button class="tab" role="tab" type="button" id="tab-progress" aria-controls="panel-progress">Progress</button>
+    <button class="tab" role="tab" type="button" id="tab-past" aria-controls="panel-past">Past rounds</button>
+    <button class="tab" role="tab" type="button" id="tab-manage" aria-controls="panel-manage">Manage</button>
+  </div>
+
+  <main>
+    <div class="panel" role="tabpanel" id="panel-round" aria-labelledby="tab-round" tabindex="-1"></div>
+    <div class="panel" role="tabpanel" id="panel-progress" aria-labelledby="tab-progress" tabindex="-1" hidden></div>
+    <div class="panel" role="tabpanel" id="panel-past" aria-labelledby="tab-past" tabindex="-1" hidden></div>
+    <div class="panel" role="tabpanel" id="panel-manage" aria-labelledby="tab-manage" tabindex="-1" hidden></div>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status" hidden>
+  <p id="toastText"></p>
+  <button class="btn btn-small" id="toastUndo" type="button">Undo</button>
+</div>
+
+<script>
+"use strict";
+/* ---------- scheduling core (no DOM) ---------- */
+function groupSizes(n) {
+  if (n <= 0) return [];
+  if (n < 6) return [n];
+  const k = Math.floor(n / 3), extra = n - 3 * k;
+  const sizes = new Array(k).fill(3);
+  for (let i = 0; i < extra; i++) sizes[k - 1 - i]++;
+  return sizes;
+}
+
+function pairKey(a, b) { return a < b ? a + "\u0001" + b : b + "\u0001" + a; }
+
+/* How many rounds each pair of names has shared a group. */
+function countPairs(rounds) {
+  const counts = new Map();
+  for (const round of rounds) for (const g of round) {
+    for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+      const k = pairKey(g[i], g[j]);
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/* Square matrix of counts for the roster, by roster index. */
+function countMatrix(roster, rounds) {
+  const n = roster.length, idx = new Map(roster.map((p, i) => [p, i]));
+  const m = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (const round of rounds) for (const g of round) {
+    for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+      const a = idx.get(g[i]), b = idx.get(g[j]);
+      if (a === undefined || b === undefined) continue;
+      m[a][b]++; m[b][a]++;
+    }
+  }
+  return m;
+}
+
+function unmetCount(m) {
+  let c = 0;
+  for (let i = 0; i < m.length; i++) for (let j = i + 1; j < m.length; j++) if (m[i][j] === 0) c++;
+  return c;
+}
+
+/* Cost of putting two people together again: any repeat costs far more
+   than every possible "how often" penalty combined, so the search first
+   minimises the NUMBER of repeated pairs and only then how stale they are. */
+const REPEAT = 10000;
+function pairCost(c) { return c === 0 ? 0 : REPEAT + c * c; }
+
+function groupCost(g, m) {
+  let c = 0;
+  for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) c += pairCost(m[g[i]][g[j]]);
+  return c;
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* One round for the people in `present` (roster indices): random deal,
+   then keep swapping two people between groups while it lowers the cost.
+   Repeated from several random deals; the cheapest result wins. */
+function bestRound(present, m, restarts, maxSwaps) {
+  let swapsLeft = maxSwaps === undefined ? Infinity : maxSwaps;
+  const sizes = groupSizes(present.length);
+  if (sizes.length <= 1) return { groups: [present.slice()], cost: groupCost(present, m) };
+  let best = null;
+  for (let r = 0; r < restarts; r++) {
+    const deal = shuffle(present.slice());
+    const groups = [];
+    let at = 0;
+    for (const s of shuffle(sizes.slice())) { groups.push(deal.slice(at, at + s)); at += s; }
+    const costs = groups.map(g => groupCost(g, m));
+    let improved = true;
+    while (improved) {
+      improved = false;
+      for (let a = 0; a < groups.length; a++) for (let b = a + 1; b < groups.length; b++) {
+        const ga = groups[a], gb = groups[b];
+        for (let i = 0; i < ga.length; i++) for (let j = 0; j < gb.length; j++) {
+          const x = ga[i], y = gb[j];
+          let delta = 0;
+          for (let k = 0; k < ga.length; k++) if (k !== i) delta += pairCost(m[y][ga[k]]) - pairCost(m[x][ga[k]]);
+          for (let k = 0; k < gb.length; k++) if (k !== j) delta += pairCost(m[x][gb[k]]) - pairCost(m[y][gb[k]]);
+          if (delta < 0 && swapsLeft > 0) {
+            swapsLeft--;
+            ga[i] = y; gb[j] = x;
+            costs[a] = groupCost(ga, m); costs[b] = groupCost(gb, m);
+            improved = true;
+          }
+        }
+      }
+    }
+    const cost = costs.reduce((s, c) => s + c, 0);
+    if (!best || cost < best.cost) best = { groups: groups.map(g => g.slice()), cost };
+  }
+  return best;
+}
+
+function applyRound(groups, m) {
+  for (const g of groups) for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+    m[g[i]][g[j]]++; m[g[j]][g[i]]++;
+  }
+}
+
+/* Plan every round still needed until all pairs have met. Plays the
+   schedule forward many times and keeps the shortest run (ties: the one
+   with the fewest repeat pairings). People in `away` skip only the first
+   planned round. Returns { rounds: [[names]], complete } . */
+const MAX_PLAN = 12;
+function planSchedule(roster, away, rounds, opts) {
+  const o = Object.assign({ rollouts: 60, restarts: 12 }, opts || {});
+  const base = countMatrix(roster, rounds);
+  const all = roster.map((_, i) => i);
+  const awaySet = new Set(away);
+  const first = all.filter(i => !awaySet.has(roster[i]));
+  if (first.length < 2) return { rounds: [], complete: unmetCount(base) === 0 };
+
+  const avoid = new Set((o.avoid || []).map(roundKey));
+  let best = null;
+  for (let r = 0; r < o.rollouts; r++) {
+    const m = base.map(row => row.slice());
+    const plan = [];
+    let skip = false;
+    while (unmetCount(m) > 0 && plan.length < MAX_PLAN) {
+      /* When reshuffling, deal the first round loosely (a random deal with
+         only a few improving swaps) so there are many different candidates;
+         later rounds stay strict, and the shortest overall plan still wins. */
+      const loose = plan.length === 0 && avoid.size > 0;
+      const round = loose
+        ? bestRound(first, m, 1, 2 + Math.floor(Math.random() * 4))
+        : bestRound(plan.length === 0 ? first : all, m, o.restarts);
+      /* Reshuffle passes the deals it has already shown; skip those. */
+      if (plan.length === 0 && avoid.has(roundKey(namesOf([round.groups], roster)[0]))) { skip = true; break; }
+      applyRound(round.groups, m);
+      plan.push(round.groups);
+    }
+    if (skip) continue;
+    const complete = unmetCount(m) === 0;
+    let spread = 0;
+    for (let i = 0; i < m.length; i++) for (let j = i + 1; j < m.length; j++) spread += m[i][j] * m[i][j];
+    const score = (complete ? 0 : 1e9) + plan.length * 1e6 + spread;
+    if (!best || score < best.score) best = { plan, score, complete };
+  }
+  if (unmetCount(base) === 0) {
+    /* Everyone has met: still offer one balanced round (a fresh one if asked). */
+    for (let tries = 0; tries < 60; tries++) {
+      const deal = tries < 10 ? bestRound(first, base, 40) : bestRound(first, base, 1, 2 + Math.floor(Math.random() * 4));
+      const extra = namesOf([deal.groups], roster);
+      if (!avoid.has(roundKey(extra[0]))) return { rounds: extra, complete: true, extra: true };
+    }
+    return null;
+  }
+  if (!best) return null;                 // every deal it found had already been shown
+  return { rounds: namesOf(best.plan, roster), complete: best.complete };
+}
+
+/* A round as a string that ignores the order of groups and of names. */
+function roundKey(round) {
+  return JSON.stringify(round.map(g => g.slice().sort()).sort());
+}
+
+function namesOf(plan, roster) {
+  /* Smaller groups first, names in roster order, for a steady layout. */
+  return plan.map(groups => groups
+    .map(g => g.slice().sort((a, b) => a - b).map(i => roster[i]))
+    .sort((a, b) => a.length - b.length || roster.indexOf(a[0]) - roster.indexOf(b[0])));
+}
+
+
+/* ==================================================================
+   Starting point: the three rounds already played, the full list of
+   people (Natalie joined after round 3), and the finishing plan worked
+   out ahead of time. "Start over" returns to exactly this.
+   ================================================================== */
+const START = {
+  roster: ["Julia", "Oriana", "Kate", "Gigi", "Joanna", "Kim", "Neethu", "Kelli", "Lindsay", "Duda", "Natalie"],
+  rounds: [
+    [["Julia", "Neethu", "Lindsay"], ["Gigi", "Kelli", "Oriana"], ["Joanna", "Kate", "Duda", "Kim"]],
+    [["Lindsay", "Kim", "Oriana"], ["Julia", "Kate", "Gigi"], ["Kelli", "Neethu", "Joanna", "Duda"]],
+    [["Oriana", "Lindsay", "Joanna"], ["Kim", "Neethu", "Gigi"], ["Kate", "Julia", "Kelli", "Duda"]]
+  ],
+  plan: [
+    [["Oriana", "Kate", "Neethu"], ["Julia", "Joanna", "Kim", "Kelli"], ["Gigi", "Lindsay", "Duda", "Natalie"]],
+    [["Julia", "Oriana", "Duda"], ["Kate", "Gigi", "Joanna", "Lindsay"], ["Kim", "Neethu", "Kelli", "Natalie"]],
+    [["Gigi", "Kim", "Duda"], ["Julia", "Oriana", "Joanna", "Natalie"], ["Kate", "Neethu", "Kelli", "Lindsay"]],
+    [["Kelli", "Lindsay", "Duda"], ["Julia", "Gigi", "Joanna", "Neethu"], ["Oriana", "Kate", "Kim", "Natalie"]]
+  ]
+};
+const STORE_KEY = "group-rotation:v1";
+const HELP_KEY = "group-rotation:help-hidden";
+const MAX_PEOPLE = 20;
+const MAX_NAME = 20;
+const MAX_UNDO = 25;
+
+/* ==================================================================
+   State.
+     rounds  rounds that have HAPPENED. Only these count toward who has
+             met whom. The first `locked` of them are the ones played
+             before this page existed and can't be moved.
+     plan    rounds still to come. plan[0] is "this round", the one shown
+             on the first tab. Marking it done moves it into `rounds`.
+     away    people left out of plan[0] only.
+     undo    a copy of everything, taken before each change, so any
+             change can be taken back (see change() below).
+   ================================================================== */
+const clone = x => JSON.parse(JSON.stringify(x));
+const planKey = s => JSON.stringify([s.roster, s.away, s.rounds.length]);
+
+function freshState() {
+  const s = {
+    v: 1, roster: START.roster.slice(), away: [], rounds: clone(START.rounds),
+    locked: START.rounds.length, plan: clone(START.plan), planComplete: true, planExtra: false, updatedAt: 0, undo: []
+  };
+  s.planFor = planKey(s);
+  return s;
+}
+
+/* Accept only well-formed data (from storage, a shared link, or an undo copy). */
+function tidy(raw) {
+  try {
+    const isName = x => typeof x === "string" && x.trim().length > 0 && x.length <= MAX_NAME * 2;
+    const isRounds = r => Array.isArray(r) && r.length <= 200 && r.every(round =>
+      Array.isArray(round) && round.length > 0 && round.every(g => Array.isArray(g) && g.length > 0 && g.every(isName)));
+    if (!raw || !Array.isArray(raw.roster) || !raw.roster.every(isName) || raw.roster.length > MAX_PEOPLE) return null;
+    if (new Set(raw.roster.map(n => n.toLowerCase())).size !== raw.roster.length) return null;
+    if (!isRounds(raw.rounds)) return null;
+    return {
+      v: 1, roster: raw.roster.slice(), rounds: clone(raw.rounds),
+      away: Array.isArray(raw.away) ? raw.away.filter(a => raw.roster.includes(a)) : [],
+      locked: Math.min(Number.isInteger(raw.locked) && raw.locked >= 0 ? raw.locked : 0, raw.rounds.length),
+      plan: isRounds(raw.plan) ? clone(raw.plan) : null,
+      planComplete: raw.planComplete !== false, planExtra: raw.planExtra === true,
+      planFor: typeof raw.planFor === "string" ? raw.planFor : "",
+      updatedAt: Number(raw.updatedAt) || 0,
+      undo: Array.isArray(raw.undo)
+        ? raw.undo.filter(u => u && typeof u.label === "string" && typeof u.snap === "string").slice(-MAX_UNDO)
+            .map(u => ({ label: u.label.slice(0, 120), at: Number(u.at) || 0, snap: u.snap }))
+        : []
+    };
+  } catch (e) { return null; }
+}
+
+/* Storage can be missing (private windows, embedded previews). The page
+   still works; it just can't remember anything after it closes. */
+let canStore = false;
+try {
+  localStorage.setItem(STORE_KEY + ":probe", "1");
+  localStorage.removeItem(STORE_KEY + ":probe");
+  canStore = true;
+} catch (e) { canStore = false; }
+
+function loadSaved() {
+  if (!canStore) return null;
+  try { return tidy(JSON.parse(localStorage.getItem(STORE_KEY))); } catch (e) { return null; }
+}
+function save() {
+  if (!canStore) return;
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { canStore = false; }
+}
+
+let state = loadSaved() || freshState();
+let tab = "round";
+let freshRound = false;            // animate the groups once, right after they change
+const opened = {};                 // which fold-outs the person has opened, by name
+let helpHidden = false;
+try { helpHidden = canStore && localStorage.getItem(HELP_KEY) === "1"; } catch (e) { /* keep it showing */ }
+
+/* Make sure the stored plan matches the current people and round count. */
+function ensurePlan() {
+  if (state.plan && state.plan.length && state.planFor === planKey(state)) return;
+  const rollouts = state.roster.length <= 12 ? 200 : 80;
+  const p = planSchedule(state.roster, state.away, state.rounds, { rollouts, restarts: 12 });
+  state.plan = p.rounds;
+  state.planComplete = p.complete;
+  state.planExtra = p.extra === true;
+  state.planFor = planKey(state);
+}
+
+/* ---------- the safety net ----------
+   Every change goes through change(): it copies the whole state first,
+   so Undo (and the list under Manage) can put things back exactly. */
+function snapshot() {
+  const { undo, ...rest } = state;
+  return JSON.stringify(rest);
+}
+function putBack(snap) {
+  let restored = null;
+  try { restored = tidy(JSON.parse(snap)); } catch (e) { restored = null; }
+  if (!restored) return false;
+  restored.undo = state.undo;
+  state = restored;
+  return true;
+}
+function change(label, mutate) {
+  const snap = snapshot();
+  const keptUndo = state.undo;
+  if (mutate() === false) return false;        // nothing actually changed
+  state.undo = keptUndo.concat({ label, at: Date.now(), snap }).slice(-MAX_UNDO);
+  state.updatedAt = Date.now();
+  save(); render();
+  toast(label + ".", true);
+  return true;
+}
+function undoLast() {
+  const last = state.undo[state.undo.length - 1];
+  if (!last) return;
+  state.undo = state.undo.slice(0, -1);
+  if (!putBack(last.snap)) { toast("That change couldn't be undone.", false); return; }
+  state.updatedAt = Date.now();
+  freshRound = true;
+  save(); render();
+  toast("Undone: " + last.label.charAt(0).toLowerCase() + last.label.slice(1) + ".", false);
+}
+function restoreVersion(entry) {
+  const when = timeLabel(entry.at);
+  change("Went back to how things were " + when, () => { freshRound = true; return putBack(entry.snap); });
+}
+
+/* ---------- actions ---------- */
+const thisRoundNumber = () => state.rounds.length + 1;
+
+function markDone() {
+  ensurePlan();
+  if (!state.plan.length) return;
+  change("Round " + thisRoundNumber() + " marked as done", () => {
+    state.rounds.push(state.plan.shift());
+    state.away = [];                                            // being out lasts one round
+    if (state.plan.length) state.planFor = planKey(state);      // the later rounds still hold
+    else state.plan = null;
+    ensurePlan();
+    freshRound = true;
+  });
+}
+
+/* Deal different groups for this round. Remembers what it has already
+   shown for this round (until the page reloads) so it never repeats. */
+let shown = { key: "", list: [] };
+function reshuffle() {
+  ensurePlan();
+  if (!state.plan.length) return;
+  const key = planKey(state), current = state.plan[0], oldLength = state.plan.length;
+  if (shown.key !== key) shown = { key, list: [] };
+  if (!shown.list.some(r => roundKey(r) === roundKey(current))) shown.list.push(current);
+  const opts = { rollouts: state.roster.length <= 12 ? 200 : 80, restarts: 12, avoid: shown.list };
+  let p = planSchedule(state.roster, state.away, state.rounds, opts);
+  if (!p) { shown.list = [current]; opts.avoid = shown.list; p = planSchedule(state.roster, state.away, state.rounds, opts); }   // seen them all: go round again
+  if (!p || !p.rounds.length) { toast("These are the only groups that work for this round.", false); return; }
+  const longer = !p.extra && p.complete && state.planComplete && !state.planExtra && p.rounds.length > oldLength;
+  change("Round " + thisRoundNumber() + " reshuffled" + (longer ? " (this deal needs one more round overall)" : ""), () => {
+    state.plan = p.rounds; state.planComplete = p.complete; state.planExtra = p.extra === true; state.planFor = key;
+    freshRound = true;
+  });
+}
+
+function toggleAway(name) {
+  const out = !state.away.includes(name);
+  change(name + (out ? " left out of round " : " put back in round ") + thisRoundNumber(), () => {
+    state.away = out ? state.away.concat(name) : state.away.filter(a => a !== name);
+    state.plan = null; ensurePlan();
+    freshRound = true;
+  });
+}
+
+/* Move the most recent finished round back to "this round", exactly as it was. */
+function reopenLastRound() {
+  if (state.rounds.length <= state.locked) return;
+  const n = state.rounds.length;
+  change("Round " + n + " moved back to This round", () => {
+    const round = state.rounds.pop();
+    const members = round.flat();
+    if (!members.every(p => state.roster.includes(p))) {       // someone in it has since been removed
+      state.away = []; state.plan = null; ensurePlan(); return;
+    }
+    state.away = state.roster.filter(p => !members.includes(p));
+    const unmetBefore = unmetCount(countMatrix(state.roster, state.rounds));
+    const after = planSchedule(state.roster, [], state.rounds.concat([round]), { rollouts: state.roster.length <= 12 ? 200 : 80, restarts: 12 });
+    state.plan = after.extra ? [round] : [round].concat(after.rounds);
+    state.planComplete = after.extra ? true : after.complete;
+    state.planExtra = unmetBefore === 0;
+    state.planFor = planKey(state);
+    freshRound = true;
+  });
+}
+
+function addPerson(rawName) {
+  const name = rawName.replace(/\s+/g, " ").trim();
+  if (!name) return "Type a name first.";
+  if (name.length > MAX_NAME) return "Keep names to " + MAX_NAME + " characters or fewer.";
+  const twin = state.roster.find(p => p.toLowerCase() === name.toLowerCase());
+  if (twin) return twin + " is already on the list. Add an initial to tell two people apart.";
+  if (state.roster.length >= MAX_PEOPLE) return "The list is full at " + MAX_PEOPLE + " people.";
+  change(name + " added", () => { state.roster.push(name); state.plan = null; ensurePlan(); });
+  return "";
+}
+
+function removePerson(name) {
+  change(name + " removed", () => {
+    state.roster = state.roster.filter(p => p !== name);
+    state.away = state.away.filter(p => p !== name);
+    state.plan = null; ensurePlan();
+  });
+}
+
+function startOver() {
+  change("Started over from round " + START.rounds.length, () => {
+    const undo = state.undo; state = freshState(); state.undo = undo;
+  });
+}
+
+/* ---------- small DOM helpers ---------- */
+function h(tag, props, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (k === "disabled" || k === "hidden" || k === "open") node[k] = true;
+    else node.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid === null || kid === undefined || kid === false) continue;
+    node.append(kid.nodeType ? kid : document.createTextNode(String(kid)));   // names always go in as text
+  }
+  return node;
+}
+const $ = id => document.getElementById(id);
+const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+function listOf(names) {
+  if (names.length <= 1) return names.join("");
+  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+}
+function timeLabel(ms) {
+  try {
+    const d = new Date(ms), today = new Date();
+    const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return d.toDateString() === today.toDateString() ? "at " + time + " today"
+      : "on " + d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) + " at " + time;
+  } catch (e) { return "earlier"; }
+}
+
+/* Buttons that remove things ask for a second tap instead of a pop-up. */
+function twoTap(button, armedLabel, run) {
+  let timer = null;
+  const label = button.textContent;
+  button.addEventListener("click", () => {
+    if (timer) { clearTimeout(timer); timer = null; button.textContent = label; run(); return; }
+    button.textContent = armedLabel;
+    timer = setTimeout(() => { timer = null; button.textContent = label; }, 4000);
+  });
+  return button;
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall through */ }
+  try {
+    const box = h("textarea", { style: "position:fixed;opacity:0" });
+    box.value = text; document.body.append(box); box.select();
+    const ok = document.execCommand("copy"); box.remove();
+    return ok;
+  } catch (e) { return false; }
+}
+
+let toastTimer = null;
+function toast(message, offerUndo) {
+  $("toastText").textContent = message;
+  $("toastUndo").hidden = !offerUndo;
+  $("toast").hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $("toast").hidden = true; }, 9000);
+}
+
+/* A fold-out that remembers whether it was open across re-draws. */
+function fold(name, summary, body, forceOpen) {
+  const node = h("details", { class: "fold", open: forceOpen || opened[name] === true },
+    h("summary", {}, summary), h("div", { class: "fold-body" }, body));
+  node.addEventListener("toggle", () => { opened[name] = node.open; });
+  return node;
+}
+
+/* ---------- rendering ---------- */
+function roundAsText(number, groups) {
+  return "Round " + number + "\n" + groups.map((g, i) => "Group " + (i + 1) + ": " + g.join(", ")).join("\n");
+}
+function groupLines(groups) {
+  return h("ul", { class: "round-groups" },
+    groups.map((g, i) => h("li", { class: "tone-" + (i % 5 + 1) }, g.join(", "))));
+}
+
+function renderRound(stats) {
+  const box = $("panel-round");
+  box.textContent = "";
+  const done = state.rounds.length, n = done + 1;
+  const groups = state.plan && state.plan[0];
+
+  /* One or two plain sentences: where we are, and where this is heading. */
+  let where = done === 0 ? "This is the first round." : done === 1 ? "Round 1 is done, so this is the next one."
+    : "Rounds 1 to " + done + " are done, so this is the next one.";
+  if (stats.unmet === 0 && stats.total > 0) where += " Everyone has already been in a group with everyone else, so this round repeats the pairings used least.";
+  else if (groups && state.planComplete) {
+    const last = done + state.plan.length;
+    where += last === n ? " After this round, everyone will have been in a group with everyone else."
+      : " After round " + last + ", everyone will have been in a group with everyone else.";
+  }
+
+  box.append(h("h2", { class: "now-title" }, "Round " + n), h("p", { class: "now-sub" }, where));
+
+  const note = h("p", { class: "note", role: "status" });
+  const copyBox = h("textarea", { class: "copy-box", readonly: "", hidden: true, "aria-label": "Groups as text" });
+
+  if (groups) {
+    box.append(
+      h("ol", { class: "groups" + (freshRound ? " fresh" : "") },
+        groups.map((g, i) => h("li", { class: "group tone-" + (i % 5 + 1) },
+          h("h3", {}, "Group " + (i + 1)),
+          h("ul", {}, g.map(name => h("li", {}, name)))))),
+      h("div", { class: "actions round-actions" },
+        h("button", { class: "btn btn-primary", type: "button", onclick: markDone }, "Round " + n + " is done"),
+        h("button", { class: "btn", type: "button", onclick: reshuffle }, "Reshuffle"),
+        h("button", {
+          class: "btn", type: "button", onclick: async () => {
+            const text = roundAsText(n, groups);
+            if (await copyText(text)) { copyBox.hidden = true; toast("Round " + n + " copied. Paste it into a text or email.", false); }
+            else { copyBox.value = text; copyBox.hidden = false; copyBox.select(); note.textContent = "Select the text below and copy it."; }
+          }
+        }, "Copy groups")),
+      h("p", { class: "done-hint" }, "Tap \u201CRound " + n + " is done\u201D once the round has happened, and round " + (n + 1) +
+        " appears. Reshuffle deals different groups for round " + n + "."),
+      note, copyBox
+    );
+  } else {
+    box.append(h("p", { class: "empty" }, "There aren't enough people for a round. At least two need to be in." +
+      (state.away.length ? " Put someone back in below." : " Add people on the Manage tab.")));
+  }
+
+  /* Fold-out 1: one-round absences. */
+  const awayNow = state.roster.filter(p => state.away.includes(p));
+  box.append(fold("out",
+    ["Someone can't make it? ", awayNow.length ? h("span", {}, "Out this round: " + listOf(awayNow)) : null],
+    [h("p", {}, "Tap a name to leave them out of round " + n + ". The groups re-deal without them, and they're back in for round " + (n + 1) + ". Tap again to put them back."),
+     h("ul", { class: "chips" }, state.roster.map(p => h("li", {},
+       h("button", { class: "chip", type: "button", "aria-pressed": String(state.away.includes(p)), onclick: () => toggleAway(p) }, p))))],
+    awayNow.length > 0));
+
+  /* Fold-out 2: the rounds after this one. */
+  if (state.plan && state.plan.length > 1) {
+    const later = state.plan.slice(1);
+    box.append(fold("later",
+      later.length === 1 ? "See round " + (n + 1) : "See rounds " + (n + 1) + " to " + (n + later.length),
+      [h("p", {}, "These are already worked out, but they adjust if someone is out or you reshuffle."),
+       h("ol", { class: "rounds" }, later.map((g, i) => h("li", {},
+         h("div", { class: "round-name" }, "Round " + (n + 1 + i)), groupLines(g))))]));
+  }
+  freshRound = false;
+}
+
+function renderProgress(stats) {
+  const box = $("panel-progress");
+  box.textContent = "";
+  const pct = stats.total ? Math.round(100 * stats.met / stats.total) : 100;
+  const left = state.plan ? state.plan.length : 0;
+  let forecast;
+  if (stats.total === 0) forecast = "Add people on the Manage tab to get going.";
+  else if (stats.unmet === 0) forecast = "Everyone has been in a group with everyone else. New rounds keep the mix as even as possible.";
+  else if (state.planComplete && left) forecast = plural(left, "more round", "more rounds") + " to go. Everyone will have met after round " + (state.rounds.length + left) + ".";
+  else forecast = "More than " + MAX_PLAN + " rounds to go with the current list.";
+
+  box.append(
+    h("h2", {}, "Progress"),
+    h("p", { class: "lede" }, "Counts finished rounds only. A pair has \u201Cmet\u201D once they've shared a group."),
+    h("div", { class: "progress" },
+      h("p", { class: "progress-line" }, h("strong", {}, stats.met + " of " + stats.total), " pairs have met"),
+      h("div", { class: "bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(stats.total), "aria-valuenow": String(stats.met), "aria-label": "Pairs that have met" },
+        h("i", { style: "width:" + pct + "%" })),
+      h("p", { class: "forecast" }, forecast))
+  );
+
+  if (stats.unmet > 0) {
+    box.append(h("div", { class: "block" },
+      h("h2", {}, "Who each person still needs to meet"),
+      h("ul", { class: "unmet" }, state.roster.map((p, i) => {
+        const left = state.roster.filter((q, j) => j !== i && stats.m[i][j] === 0);
+        return h("li", {}, h("b", {}, p), left.length ? h("span", {}, left.join(", ")) : h("span", { class: "done" }, "has met everyone"));
+      }))));
+  }
+
+  if (state.roster.length >= 2) {
+    const cls = c => "m" + Math.min(c, 3);
+    box.append(h("div", { class: "block" },
+      h("h2", {}, "Who's met who"),
+      h("p", { class: "lede" }, "Find one person down the side and the other along the top. The number is how many rounds they've shared a group."),
+      h("div", { class: "matrix-scroll", tabindex: "0", role: "group", "aria-label": "Pair counts table, scrolls sideways" },
+        h("table", { class: "matrix" },
+          h("thead", {}, h("tr", {}, h("td", { class: "self" }), state.roster.map(p => h("th", { scope: "col" }, h("span", {}, p))))),
+          h("tbody", {}, state.roster.map((p, i) => h("tr", {},
+            h("th", { scope: "row" }, p),
+            state.roster.map((q, j) => i === j
+              ? h("td", { class: "self" })
+              : h("td", { class: cls(stats.m[i][j]), title: p + " and " + q + ": " + plural(stats.m[i][j], "round", "rounds") }, stats.m[i][j] === 0 ? "\u00B7" : stats.m[i][j]))))))),
+      h("ul", { class: "legend" },
+        h("li", {}, h("i", { class: "m0" }), "Not yet"),
+        h("li", {}, h("i", { class: "m1" }), "Once"),
+        h("li", {}, h("i", { class: "m2" }), "Twice"),
+        h("li", {}, h("i", { class: "m3" }), "Three or more"))));
+  }
+}
+
+function renderPast() {
+  const box = $("panel-past");
+  box.textContent = "";
+  const done = state.rounds.length;
+  box.append(h("h2", {}, "Past rounds"),
+    h("p", { class: "lede" }, "Rounds that have happened, newest first. A round lands here when you tap \u201CRound is done.\u201D"));
+  if (!done) { box.append(h("p", { class: "empty" }, "No rounds are done yet.")); return; }
+  const items = state.rounds.map((groups, i) => {
+    const isLatest = i === done - 1, movable = isLatest && done > state.locked;
+    return h("li", {},
+      h("div", { class: "round-name" }, "Round " + (i + 1), i < state.locked ? h("span", { class: "round-tag" }, "played before this page") : null),
+      groupLines(groups),
+      movable ? h("div", { class: "round-extra" },
+        h("button", { class: "btn btn-small", type: "button", onclick: reopenLastRound }, "Not done yet? Move it back to This round")) : null);
+  }).reverse();
+  box.append(h("ol", { class: "rounds", reversed: "" }, items));
+}
+
+function renderManage() {
+  const box = $("panel-manage");
+  box.textContent = "";
+  const n = thisRoundNumber();
+
+  /* People */
+  const note = h("p", { class: "note", role: "status" });
+  const input = h("input", { type: "text", maxlength: String(MAX_NAME), placeholder: "Name", "aria-label": "Name of the person to add", autocomplete: "off" });
+  const add = () => { const problem = addPerson(input.value); if (problem) { note.textContent = problem; input.focus(); } };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+  box.append(
+    h("h2", {}, "People in the rotation"),
+    h("p", { class: "lede" }, "For someone joining or leaving for good. To leave someone out of just one round, use \u201CSomeone can't make it?\u201D on the This round tab."),
+    h("ul", { class: "rows" }, state.roster.map(p => h("li", {},
+      h("span", { class: "who" }, h("b", {}, p)),
+      twoTap(h("button", { class: "btn btn-small", type: "button", "aria-label": "Remove " + p }, "Remove"), "Tap again to remove", () => removePerson(p))))),
+    h("div", { class: "add" }, input, h("button", { class: "btn", type: "button", onclick: add }, "Add person")),
+    note
+  );
+
+  /* Earlier versions */
+  const versions = state.undo.slice().reverse();
+  box.append(fold("versions", "Go back to an earlier version",
+    [h("p", {}, "A copy is kept before every change, for the last " + MAX_UNDO + " changes. Going back is itself a change, so it can be undone too."),
+     versions.length
+       ? h("ul", { class: "rows" }, versions.map(v => h("li", {},
+           h("span", { class: "who" }, h("b", {}, "Before: " + v.label), h("small", {}, "Saved " + timeLabel(v.at))),
+           h("button", { class: "btn btn-small", type: "button", onclick: () => restoreVersion(v) }, "Go back to this"))))
+       : h("p", { class: "empty" }, "Nothing has been changed yet.")]));
+
+  /* Another device */
+  const linkNote = h("p", { class: "note", role: "status" });
+  box.append(fold("device", "Use on another phone or computer",
+    [h("p", {}, "Everything is saved in the browser you're using now, on this device only. To carry it somewhere else, or to keep a backup, copy this link and open it there."),
+     h("div", { class: "actions" }, h("button", {
+       class: "btn", type: "button", onclick: async () => {
+         if (!/^https?:$/.test(location.protocol)) { linkNote.textContent = "The link works once this page is on its real web address."; return; }
+         const url = location.origin + location.pathname + location.search + "#rounds=" + encodeShare();
+         linkNote.textContent = (await copyText(url)) ? "Link copied. Open it on the other device and choose Load these rounds." : "Couldn't copy here. Try again in Safari or Chrome.";
+       }
+     }, "Copy link with these rounds")),
+     linkNote]));
+
+  /* Start over */
+  box.append(fold("reset", "Start over",
+    [h("p", {}, "Goes back to the three rounds played before this page, with the original eleven people. Undo brings everything back if you change your mind."),
+     h("div", { class: "actions" }, twoTap(h("button", { class: "btn", type: "button" }, "Start over from round " + START.rounds.length), "Tap again to start over", startOver))]));
+}
+
+function renderChrome() {
+  $("saveState").textContent = canStore ? "Saved on this device" : "Not saving in this preview";
+  const last = state.undo[state.undo.length - 1];
+  $("undoBtn").disabled = !last;
+  $("undoBtn").title = last ? "Undo: " + last.label : "Nothing to undo";
+  $("undoBtn").setAttribute("aria-label", last ? "Undo: " + last.label : "Undo (nothing to undo)");
+  $("help").hidden = helpHidden;
+  $("helpBtn").setAttribute("aria-expanded", String(!helpHidden));
+  for (const name of ["round", "progress", "past", "manage"]) {
+    const on = name === tab;
+    $("tab-" + name).setAttribute("aria-selected", String(on));
+    $("tab-" + name).tabIndex = on ? 0 : -1;
+    $("panel-" + name).hidden = !on;
+  }
+}
+
+function render() {
+  ensurePlan();
+  const m = countMatrix(state.roster, state.rounds);
+  const n = state.roster.length;
+  const total = n * (n - 1) / 2, unmet = unmetCount(m);
+  const stats = { m, total, unmet, met: total - unmet };
+  renderRound(stats); renderProgress(stats); renderPast(); renderManage(); renderChrome();
+}
+
+/* ---------- top bar, help and tabs ---------- */
+function setHelp(hidden) {
+  helpHidden = hidden;
+  try { if (canStore) localStorage.setItem(HELP_KEY, hidden ? "1" : "0"); } catch (e) { /* fine */ }
+  renderChrome();
+}
+$("helpBtn").addEventListener("click", () => { setHelp(!helpHidden); if (!helpHidden) $("help").scrollIntoView({ block: "nearest" }); });
+$("helpClose").addEventListener("click", () => setHelp(true));
+$("undoBtn").addEventListener("click", undoLast);
+$("toastUndo").addEventListener("click", undoLast);
+
+/* ---------- light / dark toggle ----------
+   No saved choice = follow the device. Tapping the button flips whatever
+   is showing now and remembers it on this device. */
+const THEME_KEY = "group-rotation:theme";
+function currentTheme() {
+  const chosen = document.documentElement.getAttribute("data-theme");
+  if (chosen === "light" || chosen === "dark") return chosen;
+  return window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+function paintThemeButton() {
+  const dark = currentTheme() === "dark";
+  const label = dark ? "Switch to light mode" : "Switch to dark mode";
+  $("themeBtn").setAttribute("aria-label", label);
+  $("themeBtn").title = label;
+  $("iconSun").toggleAttribute("hidden", !dark);     // the icon shows where a tap takes you
+  $("iconMoon").toggleAttribute("hidden", dark);
+  $("themeColor").setAttribute("content", dark ? "#10142A" : "#F3F5FA");
+}
+$("themeBtn").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* still applies for this visit */ }
+  paintThemeButton();
+});
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeButton); } catch (e) { /* older browsers */ }
+paintThemeButton();
+
+const TABS = ["round", "progress", "past", "manage"];
+function showTab(name, focus) {
+  tab = name; renderChrome();
+  if (focus) $("tab-" + name).focus();
+}
+TABS.forEach((name, i) => {
+  $("tab-" + name).addEventListener("click", () => showTab(name));
+  $("tab-" + name).addEventListener("keydown", e => {
+    if (e.key === "ArrowRight") showTab(TABS[(i + 1) % TABS.length], true);
+    if (e.key === "ArrowLeft") showTab(TABS[(i + TABS.length - 1) % TABS.length], true);
+  });
+});
+
+/* ---------- carrying rounds between devices via a link ---------- */
+function encodeShare() {
+  const payload = JSON.stringify({ roster: state.roster, away: state.away, rounds: state.rounds, locked: state.locked });
+  return btoa(unescape(encodeURIComponent(payload))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function decodeShare(text) {
+  try {
+    const b64 = text.replace(/-/g, "+").replace(/_/g, "/");
+    return tidy(JSON.parse(decodeURIComponent(escape(atob(b64)))));
+  } catch (e) { return null; }
+}
+function clearHash() {
+  try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* not allowed here */ }
+}
+function checkSharedLink() {
+  const match = /[#&]rounds=([A-Za-z0-9_-]+)/.exec(location.hash || "");
+  if (!match) return;
+  const shared = decodeShare(match[1]);
+  const same = shared && JSON.stringify([shared.roster, shared.rounds]) === JSON.stringify([state.roster, state.rounds]);
+  if (!shared || same) { clearHash(); return; }
+  $("linkBannerText").textContent = "This link carries " + plural(shared.rounds.length, "finished round", "finished rounds") + " for " +
+    plural(shared.roster.length, "person", "people") + ". This device has " + plural(state.rounds.length, "finished round", "finished rounds") + " saved.";
+  $("linkBanner").hidden = false;
+  $("linkLoad").onclick = () => {
+    $("linkBanner").hidden = true; clearHash();
+    change("Rounds loaded from a link", () => { const undo = state.undo; state = shared; state.undo = undo; state.plan = null; ensurePlan(); });
+  };
+  $("linkIgnore").onclick = () => { $("linkBanner").hidden = true; clearHash(); };
+}
+
+/* Another tab changed the saved rounds: follow it. */
+window.addEventListener("storage", e => {
+  if (e.key !== STORE_KEY) return;
+  const latest = loadSaved();
+  if (latest) { state = latest; render(); }
+});
+
+render();
+checkSharedLink();
+</script>
+</body>
+</html>
